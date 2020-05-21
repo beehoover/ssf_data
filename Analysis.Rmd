@@ -1,0 +1,87 @@
+---
+title: "Data Exploration"
+author: "BR"
+date: "20/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+#survey <- read.csv("data/survey_comp.csv")
+#survey_final <-read.csv("data/survey_final.csv")
+```
+
+Adding likert response questions - perception
+```{r}
+likert <- survey_final %>% 
+  select(survey_id, opinion_a:satisfaction_c) 
+```
+
+Simplifying wtp
+Output - "data_wtp", wtp is 
+```{r}
+surve_wtp <- survey_final %>% 
+  select(survey_id, starts_with("wtp")) %>% 
+  mutate_all(funs(str_replace(., "yes", "1"))) %>% 
+  mutate_all(funs(str_replace(., "no", "0"))) 
+
+surve_wtr <- survey_final %>% 
+  select(survey_id, starts_with("wtr")) %>% 
+  mutate_all(funs(str_replace(., "yes", "0"))) %>% 
+  mutate_all(funs(str_replace(., "no", "-1"))) 
+
+fill_na<-function(df ){
+  
+  df <- df %>% 
+    replace(is.na(.), "0") 
+  
+  df[] <- lapply(df, as.numeric)
+  
+  return(df)
+}
+
+survey_wtp <- fill_na(surve_wtp)
+
+survey_wtr <- fill_na(surve_wtr)
+
+data_wtp<- survey_wtp %>% 
+  left_join(survey_wtr) %>% 
+  mutate(wtp = rowSums(.[2:9])) %>% 
+  mutate(wtp = ifelse(wtp < 0, wtp - 1, wtp)) %>% 
+  select(survey_id, wtp) %>% 
+  left_join(survey) %>% 
+  left_join(likert)
+```
+
+```{r}
+#write.csv(data_wtp,"ssf_data.csv", row.names = FALSE)
+```
+
+```{r}
+data <- read.csv("ssf_data.csv")
+
+gear <- data %>% 
+  select(starts_with("gear_")) %>% 
+  gather(gear,count,) %>% 
+  filter(count == 1) %>% 
+  mutate(gear=as.factor(gear)) 
+
+names(gear) <- gsub(x = names(gear), pattern = "gear_", replacement = "")  
+
+ggplot(gear, aes(x=gear)) +
+  geom_bar(width = 0.5)
+```
+
+Age
+Income
+Education
+Years Fishing
+Part of fishing org
+Boat ownership
+catch trends
+Problems Ranked
+

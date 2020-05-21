@@ -1,0 +1,45 @@
+---
+title: "Survey Design Eval"
+author: "BR"
+date: "20/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggpubr)
+theme_set(theme_pubr())
+```
+
+```{r}
+data_one <- read.csv("data/master_survey_resp.csv") %>% 
+  select(survey_id, catch_trends)
+
+data <- read.csv("ssf_data.csv") %>% 
+  select(survey_id, age, years_fishing, boat_status, income_usd, education, fishing_organization, starts_with("rank")) %>% 
+  left_join(data_one)
+str(data)
+```
+
+Age
+Income
+Education
+Years Fishing
+Part of fishing org
+Boat ownership
+catch trends
+Problems Ranked
+
+```{r}
+ggplot(data, aes(age)) +
+  geom_histogram(fill = "#00afbb", bins = 20, position = "dodge", color = "white") +
+  theme_pubclean()
+```
+
+```{r}
+install.packages("PerformanceAnalytics")
+library("PerformanceAnalytics")
+my_data <- data[, c(2:12)]
+chart.Correlation(my_data, histogram = TRUE, pch = 19)
+```
+

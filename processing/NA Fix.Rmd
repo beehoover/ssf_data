@@ -1,0 +1,248 @@
+---
+title: "na_fix"
+author: "BR"
+date: "20/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(data.table)
+library(zoo)
+library(kableExtra)
+library(qwraps2)
+```
+
+Must run entire script for raw data. rmd
+```{r}
+survey_final<-read.csv("data/survey_final.csv")
+```
+
+```{r}
+#sapply(survey_final, function(x) sum(is.na(x)))
+```
+
+
+Zero NA
+
+start	0
+end	0
+survey_type	0
+survey_id	0
+survey_version	0
+country	0
+community	0
+sex	0
+boat_status	0
+boat_power	0
+boat_length	0
+choice	0
+package_nopackage	0
+fishing_organization	0
+punishment_severity	0
+mpa	0
+age	0
+years_fishing	0
+education	0
+digits	0
+
+Fixed
+
+income, enforcement, restriction, gear, fishtech, rank_one, rank_two, rank_three, rank_four
+
+
+
+
+```{r}
+survey<-survey_final %>%  
+  mutate(sex = ifelse(survey_id == 5034, "F", "M")) %>% 
+  mutate(survey_type = "data") %>%
+  arrange(survey_id) %>% 
+  fill(boat_status, boat_power) %>% 
+  group_by(community) %>% # boat length
+  mutate(boat_length = round(ifelse(is.na(boat_length), mean(boat_length, na.rm = TRUE), boat_length)), digits = 0) %>% 
+  ungroup()
+```
+
+
+4. In the last 12 months, what fishing gear have you used? (Select all that apply)
+#Refer to translation sheet https://docs.google.com/spreadsheets/d/1u1rI-I2xt75-P57bopTiFaW4rPcewF44EaAQjJcjzIc/edit#gid=0
+```{r}
+gear_na<-survey %>%
+  select(survey_id, gear_handline:other_gear) %>%
+  mutate(other_gear = as.character(other_gear)) %>% 
+  mutate(gear_handline = ifelse(grepl("pancing", other_gear, ignore.case=TRUE), 1, gear_handline)) %>% 
+  mutate(gear_mobilenet = ifelse(grepl("purse|payang|tarik", other_gear, ignore.case=TRUE), 1,  gear_mobilenet)) %>% 
+  mutate(gear_traps = ifelse(grepl("jaring rajungan|ditebar", other_gear, ignore.case = TRUE),1, gear_traps)) %>% 
+  mutate(gear_gillnet = ifelse(grepl("rampus|Jaring udang", other_gear, ignore.case = TRUE), 1 ,gear_gillnet)) %>% 
+  mutate(gear_other = ifelse(grepl("angkat", other_gear, ignore.case = TRUE), 1, gear_other)) %>% 
+  mutate(na_count = rowSums(is.na(.))) %>% 
+  filter(na_count < 8) %>%
+  mutate_all(funs(replace(., is.na(.), 0))) %>% 
+  select(-na_count)
+```
+
+```{r}
+fishtech_na<-survey %>%
+  select(survey_id, contains('fishtech')) %>%
+  mutate(other_fishtech = as.character(other_fishtech)) %>% 
+  mutate(fishtech_vesseltrack = ifelse(grepl("zana", other_fishtech, ignore.case=TRUE), 1, fishtech_vesseltrack)) %>% 
+  fill(starts_with('fishtech')) %>% 
+  mutate(fishtech_vhf = ifelse(grepl("radio", other_fishtech, ignore.case=TRUE), 1, fishtech_vhf)) 
+```
+
+27. What regulations exist for your #1 targeted fishery? (Select all that apply)
+⬜	a. Gear Restrictions
+⬜	b. Size Restrictions
+⬜	c. Seasonal Restrictions
+⬜	d. Spatial Restrictions
+⬜	e. Quotas
+⬜	f. Other  _______________________
+⬜	g. None
+
+```{r}
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+restriction_na<-survey %>%
+  select(survey_id, community, contains('restriction_')) %>%
+  group_by(community) %>% 
+  mutate(restriction_gear= na.aggregate(restriction_gear, FUN=Mode),
+         restriction_size = na.aggregate(restriction_size, FUN=Mode),
+         restriction_season = na.aggregate(restriction_season, FUN=Mode),
+         restriction_spacial = na.aggregate(restriction_spacial, FUN=Mode),
+         restriction_quota = na.aggregate(restriction_quota, FUN=Mode),
+         restriction_other = na.aggregate(restriction_other, FUN=Mode),
+         restriction_none = na.aggregate(restriction_none, FUN=Mode))
+```
+
+28. Who is responsible for enforcement in your community? (Select all that apply)
+⬜	a. Community Members
+⬜	b. Village customary leader
+⬜	c. Village Government
+⬜	d. Provincial Government
+⬜	e. National Government
+⬜	f. No Enforcement
+⬜	g. Other _______________________
+
+                          
+```{r}
+enforcement_na<-survey %>%
+  select(survey_id, community, contains('enforcement_'), -enforcement_interval) %>%
+  group_by(community) %>% 
+  mutate(enforcement_community_members = na.aggregate(enforcement_community_members, FUN=Mode),
+       enforcement_village_leader = na.aggregate(enforcement_village_leader, FUN=Mode),
+       enforcement_village_gov = na.aggregate(enforcement_village_gov, FUN=Mode),
+       enforcement_provincial_gov = na.aggregate(enforcement_provincial_gov, FUN=Mode),
+       enforcement_national_gov = na.aggregate(enforcement_national_gov, FUN=Mode),
+       enforcement_none = na.aggregate(enforcement_none, FUN=Mode),
+       enforcement_other = na.aggregate(enforcement_other, FUN=Mode))
+
+#df1<-enforcement_na %>%
+#   select(-survey_id) %>%
+#   mutate_if(is.numeric,as.factor) %>% 
+#   gather(key = "enf", value = "ans", - community) %>%
+#   group_by(community, enf) %>% 
+#   count(ans) %>% 
+#   spread(key = enf, value = n)
+```
+34. Please rank the following problems. 
+		a. Trash polluting the ocean	
+		b. Illegal Fishing	
+		c. Extreme Weather	
+		d. Corruption of fishing authorities
+		
+rank_one	5
+rank_two	6
+rank_three	7
+rank_four	11
+```{r}
+rank_na<-survey %>%
+  select(survey_id, community, contains('rank_')) %>%
+  group_by(community) %>% 
+  mutate(rank_one = na.aggregate(rank_one, FUN=Mode),
+       rank_two = na.aggregate(rank_two, FUN=Mode),
+       rank_three = na.aggregate(rank_three, FUN=Mode),
+       rank_four = na.aggregate(rank_four, FUN=Mode))
+```
+
+35. In the last few years, the current fish catch has…		
+◯	a. Declined a lot		
+◯	b. Declined slightly		
+◯	c. Stayed the same		
+◯	d. Improved slightly		
+◯	e. Improved a lot		
+
+NA - 1
+```{r}
+
+```
+
+42. What is your average monthly income? (INR/MEX)
+income-8 missing
+Converted all to USD
+```{r}
+#HUGE distribution of income in IND, especially in WKB (10^7 difference) min is a single digit number, which does not make sense for Indonesia (Annual income for lowest income would be $0.0043) 
+
+#Fixing for Wkb income error & currency conversion 
+
+#0.000071 USD / 1 Indonesian Rupiah 
+#0.052 USD / 1 Medican Peso
+
+income_na <- survey %>% 
+  select(survey_id, country, community, income) %>%
+  mutate(income_fix = ifelse(country == "IND" & income <= 10, income*1000000, income)) %>% 
+  mutate(currency = ifelse(country=="MEX", 0.052, 0.000071)) %>% 
+  mutate(income_usd = currency*income_fix) %>% 
+  group_by(community) %>% 
+  mutate(income_usd = na.aggregate(income_usd)) %>% 
+  mutate(income_usd = round(income_usd, digits = 0)) %>% 
+  select(survey_id, income_usd)
+
+#checking to see if the numbers make sense
+income_summary <-
+  list("Monthly Income" =
+       list("min" = ~ min(.data$income_usd),
+            "max" = ~ max(.data$income_usd),
+            "mean (sd)" = ~ qwraps2::mean_sd(.data$income_usd)))
+
+#checking data before we fixed it. 
+#income_na <- survey %>% 
+#  select(community, income) %>% 
+#  na.omit() %>% 
+#  mutate(community = as.factor(community))
+
+by_com <- summary_table(dplyr::group_by(income_na, community), income_summary)
+kable(by_com)
+```
+
+```{r}
+na_sum<-as.data.frame(colSums(is.na(survey)))
+colnames(na_sum)<-"sum"
+na_sum<-rownames_to_column(na_sum, "col")
+
+complete <- na_sum %>% 
+  filter(sum == 0) %>% 
+  pull('col')
+
+survey_comp<-survey %>% 
+  select(complete) %>% 
+  left_join(gear_na) %>% 
+  left_join(fishtech_na) %>%
+  left_join(enforcement_na) %>%
+  left_join(restriction_na) %>%
+  left_join(rank_na) %>%
+  left_join(income_na) 
+
+
+```
+
+```{r}
+#write.csv(survey_comp,"survey_comp.csv", row.names = FALSE)
+```
+
+
