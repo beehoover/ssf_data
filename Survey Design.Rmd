@@ -7,39 +7,145 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(kableExtra)
 library(ggpubr)
+library(magrittr)
+library(qwraps2)
+library(arsenal)
+library(RColorBrewer)
+library(expss)
 theme_set(theme_pubr())
 ```
+[1] 3050
+[1] 1003
+[1] 1004
+[1] 1012
+[1] 3059
+[1] 1005
+[1] 1017
 
 ```{r}
+#creating df of only relevant variables
 data_one <- read.csv("data/master_survey_resp.csv") %>% 
   select(survey_id, catch_trends)
 
-data <- read.csv("ssf_data.csv") %>% 
-  select(survey_id, age, years_fishing, boat_status, income_usd, education, fishing_organization, starts_with("rank")) %>% 
-  left_join(data_one)
-str(data)
+ssf_data <- read.csv("ssf_data.csv")
+
+#rearranging fishery problems ranked to make it ordered 
+
+problem_rank <- ssf_data %>% 
+  select(survey_id, starts_with("rank")) %>% 
+  gather(rank, problem, -survey_id) %>% 
+  mutate(rank = as.factor(ordered(rank, levels = c("rank_one", "rank_two", "rank_three", "rank_four")))) %>% 
+  mutate(rank = as.factor(as.numeric(rank))) %>% 
+  spread(problem, rank)
+
+#combining variables for final df for survey design class
+data <- ssf_data %>% 
+  select(survey_id, age, years_fishing, boat_status, income_usd, education, fishing_organization) %>% 
+  left_join(data_one) %>% 
+  left_join(problem_rank)
+
+#assigning ordered levels to categorical variables
+data$boat_status <- ordered(data$boat_status, 
+                            levels = c("own", "share_collective", "rent", "share_employee"),
+                            labels = c("Own", "Share as Collective", "Rent", "Share as Employee")) #share_employee has least ownership of vessel
+data$education <- ordered(data$education, 
+                          levels = c("no_formal", "primary", "secondary", "vocational", "university", "other"),
+                          labels = c("No Formal Education", "Primary School", "Secondary School", "Vocational/Trade School", "University or Higher", "Other"))
+
+data$catch_trends <-ordered(data$catch_trends, 
+                            levels = c("decline_high", "decline_low", "no_change", "increase_low", "increase_high"),
+                            labels = c("Decline (High)", "Decline (Low)", "No Change", "Increase (Low)", "Increase (High)"))
 ```
 
-Age
-Income
-Education
-Years Fishing
-Part of fishing org
-Boat ownership
-catch trends
-Problems Ranked
+```{r results = "asis"} 
+demo_data <- data %>% 
+  select(age, years_fishing, income_usd, boat_status, education, fishing_organization) %>%
+  mutate(fishing_organization = as.factor(ifelse(fishing_organization == "yes", 1, 0))) %>% 
+  apply_labels(age = "Age",
+               years_fishing = "Years Fishing",
+               boat_status = "Vessel Ownership Status",
+               income_usd = "Monthly Income (USD)",
+               education = "Education Level",
+               fishing_organization = "Member of Fishing Organization",
+               fishing_organization = c("Yes" = 1,
+                                         "No" = 0)
+               )
+
+
+my_controls <- tableby.control(
+  test = T,
+  total = T,
+  numeric.test = "kwt", cat.test = "chisq",
+  numeric.stats = c("meansd", "medianq1q3", "range", "Nmiss2"),
+  cat.stats = c("countpct", "Nmiss2"),
+  ordered.stats = c("countpct", "Nmiss2"),
+  stats.labels = list(
+    meansd = "Mean (SD)",
+    medianq1q3 = "Median (Q1, Q3)",
+    range = "Min - Max",
+    Nmiss2 = "Missing"
+  )
+)
+ 
+table_two <- tableby( ~ .,
+  data = demo_data,
+  control = my_controls
+)
+ 
+summary(table_two,
+        title = "Summary Statistic of Fisher Data",
+        digits = 2)
+
+```
 
 ```{r}
+#age
 ggplot(data, aes(age)) +
   geom_histogram(fill = "#00afbb", bins = 20, position = "dodge", color = "white") +
   theme_pubclean()
+
+ggplot(data, aes(years_fishing)) +
+  geom_histogram(fill = "#00afbb", bins = 20, position = "dodge", color = "white") +
+  theme_pubclean()
+
+ggplot(data, aes(income_usd)) +
+  geom_histogram(fill = "#00afbb", bins = 20, position = "dodge", color = "white") +
+  theme_pubclean()
+
+ggplot(data, aes(boat_status)) +
+  geom_bar(fill = "#00afbb", position = "dodge", color = "white") +
+  ylim(0, 140)+
+  theme_pubclean()
+
+ggplot(data, aes(education)) +
+  geom_bar(fill = "#00afbb", position = "dodge", color = "white") +
+  ylim(0, 140)+
+  theme_pubclean()
+
+ggplot(data, aes(fishing_organization)) +
+  geom_bar(fill = "#00afbb", position = "dodge", color = "white") +
+  ylim(0, 140)+
+  theme_pubclean()
+
+
 ```
 
 ```{r}
-install.packages("PerformanceAnalytics")
-library("PerformanceAnalytics")
-my_data <- data[, c(2:12)]
-chart.Correlation(my_data, histogram = TRUE, pch = 19)
-```
+ranks <- data %>% 
+  select(corruption, trash_pollutin, iuu, weather) %>%
+  gather(problem, rank) %>% 
+  mutate(problem = as.factor(ordered(problem, levels = c("weather", "trash_pollutin", "iuu", "corruption"),
+                                     labels = c("Extreme Weather Events", "Marine Pollution", "Illegal Fishing", "Corruption of Fishery Officials"))))
 
+
+ggplot(ranks, aes(x = rank)) +
+  geom_bar(aes(fill = rank),
+           bins = 20, position = "dodge", color = "white") +
+  facet_wrap(~problem, nrow = 1, scale = "free_x") + 
+  scale_fill_manual(values = c("#1A5276", "#2980B9", "#7FB3D5", "#A9CCE3")) +
+  labs(fill = "Problem Ranking", y = "Count", x = "Rank") +
+  theme_pubclean()
+```
